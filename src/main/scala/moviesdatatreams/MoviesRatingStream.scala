@@ -1,10 +1,9 @@
 package moviesdatatreams
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
-import util._
 import org.apache.spark.sql.streaming.Trigger
-import scala.concurrent.duration._
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{Column,DataFrame, SparkSession}
+import util._
+
 
 
 object MoviesRatingStream {
@@ -15,7 +14,22 @@ object MoviesRatingStream {
     .master("local[2]")
     .getOrCreate()
 
-  def readFromFiles(): Unit = {
+  val mTBasics:DataFrame = spark.read
+//    .schema(mTitlesSchema)
+    .option("inferSchema", true)
+    .format("csv")
+    .option("header","true")
+    .option("delimiter", "\t")
+    .load("src/main/data/MoviesTitleBasics")
+
+  mTBasics.show(5)
+
+  // joining static DFs
+//  val joinCondition = guitarPlayers.col("band") === bands.col("id")
+//  val guitaristsBands = guitarPlayers.join(bands, joinCondition, "inner")
+
+
+  def mRatingFromFiles(): Unit = {
 //    Reading DF
     val mRatings:DataFrame = spark.readStream
       .format("csv")
@@ -24,7 +38,18 @@ object MoviesRatingStream {
       .schema(mRatingSchema)
       .load(path = "src/main/data/MoviesRatings")
 
-    val query = mRatings.writeStream
+//    more than 500 votes with SQL
+//    mRatings.createOrReplaceTempView("ratings")
+//    val populerMovies:DataFrame = spark.sql("SELECT * FROM ratings WHERE numVotes > 500")
+
+    val populerMovies:DataFrame = mRatings.filter("numVotes > 500")
+//    populerMovies.col("Value").as("Value")
+
+    // joining static DFs
+    val joinCondition = mTBasics.col("tconst") === populerMovies.col("tconst")
+    val moviesRatings = mTBasics.join(populerMovies, joinCondition, "inner")
+
+    val query = moviesRatings.writeStream
       .format("console")
       .outputMode("append")
       .start()
@@ -34,8 +59,10 @@ object MoviesRatingStream {
 
   }
 
+
+
   def main(args: Array[String]): Unit = {
-    readFromFiles()
+    mRatingFromFiles()
   }
 
 
